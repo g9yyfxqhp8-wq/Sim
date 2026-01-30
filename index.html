@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SimpleTube - Watch & Share Videos</title>
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#FF0000">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="SimpleTube">
+    <meta name="application-name" content="SimpleTube">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%23FF0000'/%3E%3Cpath d='M35 30 L35 70 L75 50 Z' fill='white'/%3E%3C/svg%3E">
+    <link rel="apple-touch-icon" sizes="180x180" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%23FF0000'/%3E%3Cpath d='M65 60 L65 120 L125 90 Z' fill='white'/%3E%3C/svg%3E">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#FF0000',
+                        dark: '#0F0F0F',
+                        darker: '#272727',
+                        light: '#F9F9F9',
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
+        * { font-family: 'Roboto', sans-serif; }
+        .sidebar-scroll::-webkit-scrollbar { width: 8px; }
+        .sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+        .sidebar-scroll::-webkit-scrollbar-thumb { background: #717171; border-radius: 4px; }
+        .video-card:hover .thumbnail { transform: scale(1.05); }
+        .thumbnail { transition: transform 0.3s ease; }
+        .chip-active { background-color: #0F0F0F; color: white; }
+        .dark .chip-active { background-color: #F1F1F1; color: #0F0F0F; }
+        .progress-bar { transition: width 0.3s ease; }
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .like-anim { animation: likePulse 0.4s ease; }
+        @keyframes likePulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.2); } }
+    </style>
+</head>
+<body class="bg-light dark:bg-dark text-gray-900 dark:text-white transition-colors duration-300 overflow-x-hidden">
+
+    <!-- Header -->
+    <header class="fixed top-0 w-full h-14 bg-white/95 dark:bg-dark/95 backdrop-blur-sm z-50 flex items-center justify-between px-4 border-b dark:border-gray-800 transition-colors duration-300">
+        <div class="flex items-center gap-4 flex-shrink-0">
+            <button id="menuBtn" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
+            </button>
+            <div class="flex items-center gap-1 cursor-pointer" onclick="showHome()">
+                <svg width="32" height="32" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" class="rounded-lg shadow-md">
+                    <rect width="100" height="100" rx="20" fill="#FF0000"/>
+                    <path d="M35 30 L35 70 L75 50 Z" fill="white"/>
+                    <path d="M35 30 L45 35 L45 65 L35 70 Z" fill="rgba(255,255,255,0.3)"/>
+                </svg>
+                <span class="text-xl font-bold tracking-tight hidden sm:block">SimpleTube</span>
+            </div>
+        </div>
+
+        <div class="hidden md:flex items-center justify-center flex-1 max-w-2xl mx-4">
+            <div class="flex w-full">
+                <div class="flex-1 relative group">
+                    <input type="text" id="searchInput" placeholder="Search" class="w-full h-10 pl-4 pr-12 rounded-l-full border border-gray-300 dark:border-gray-700 bg-white dark:bg-dark focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:text-white transition-all">
+                </div>
+                <button onclick="performSearch()" class="h-10 w-16 bg-gray-100 dark:bg-gray-800 border border-l-0 border-gray-300 dark:border-gray-700 rounded-r-full hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center justify-center transition-colors">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                </button>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2 flex-shrink-0" id="authButtons">
+            <button onclick="toggleUploadModal()" class="hidden md:flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors font-medium text-sm">
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4zM14 13h-3v3H9v-3H6v-2h3V8h2v3h3v2z"/></svg>
+                <span>Create</span>
+            </button>
+            <button onclick="toggleAuthModal()" id="signInBtn" class="flex items-center gap-2 px-4 py-2 border border-blue-600 text-blue-600 rounded-full hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors font-medium text-sm">
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>
+                <span>Sign In</span>
+            </button>
+            <div id="userProfile" class="hidden flex items-center gap-2">
+                <button onclick="toggleProfile()" class="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 text-white font-medium flex items-center justify-center text-sm" id="userAvatar">U</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="fixed left-0 top-14 w-16 md:w-64 h-[calc(100vh-56px)] bg-white dark:bg-dark z-40 overflow-y-auto sidebar-scroll transform -translate-x-full md:translate-x-0 transition-transform duration-300 border-r dark:border-gray-800">
+        <div class="p-3">
+            <div class="menu-item flex items-center gap-5 p-2 rounded-lg cursor-pointer bg-gray-100 dark:bg-gray-800" onclick="showHome()">
+                <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+                <span class="hidden md:block font-medium text-sm">Home</span>
+            </div>
+            <div class="menu-item flex items-center gap-5 p-2 rounded-lg cursor-pointer mt-1">
+                <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                <span class="hidden md:block font-medium text-sm">Shorts</span>
+            </div>
+            <div class="menu-item flex items-center gap-5 p-2 rounded-lg cursor-pointer mt-1">
+                <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M20 8H4V6h16v2zm-2-6H6v2h12V2zm4 10v8c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2v-8c0-1.1.9-2 2-2h16c1.1 0 2 .9 2 2zm-6 4l-6-3.27v6.53L16 16z"/></svg>
+                <span class="hidden md:block font-medium text-sm">Subscriptions</span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main id="mainContent" class="ml-0 md:ml-64 mt-14 transition-all duration-300 min-h-[calc(100vh-56px)] bg-light dark:bg-dark">
+        
+        <!-- Home View -->
+        <div id="homeView" class="fade-in">
+            <div class="sticky top-14 z-20 bg-light/95 dark:bg-dark/95 backdrop-blur-sm border-b dark:border-gray-800 py-3 px-4 overflow-x-auto no-scrollbar">
+                <div class="flex gap-3 min-w-max" id="categoryChips">
+                    <button class="chip-active px-4 py-1.5 rounded-lg text-sm font-medium transition-all" onclick="filterCategory('all', this)">All</button>
+                    <button class="px-4 py-1.5 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all" onclick="filterCategory('gaming', this)">Gaming</button>
+                    <button class="px-4 py-1.5 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all" onclick="filterCategory('music', this)">Music</button>
+                    <button class="px-4 py-1.5 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all" onclick="filterCategory('tech', this)">Technology</button>
+                    <button class="px-4 py-1.5 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all" onclick="filterCategory('entertainment', this)">Entertainment</button>
+                </div>
+            </div>
+
+            <div class="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" id="videoGrid">
+                <div class="col-span-full flex items-center justify-center py-20">
+                    <div class="w-8 h-8 border-4 border-gray-300 dark:border-gray-600 border-t-primary rounded-full animate-spin"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Watch View -->
+        <div id="watchView" class="hidden fade-in max-w-7xl mx-auto p-4">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="lg:col-span-2">
+                    <div class="relative aspect-video bg-black rounded-xl overflow-hidden shadow-2xl">
+                        <video id="mainVideo" class="w-full h-full" controls controlsList="nodownload">
+                            <source src="" type="video/mp4">
+                        </video>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <h1 id="videoTitle" class="text-xl font-bold mb-2">Loading...</h1>
+                        <div class="flex flex-wrap items-center justify-between gap-4 pb-4 border-b dark:border-gray-800">
+                            <div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                                <span id="videoViews">0 views</span>
+                                <span>•</span>
+                                <span id="videoDate">Loading...</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button onclick="toggleLike()" id="likeBtn" class="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+                                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>
+                                    <span id="likeCount">0</span>
+                                </button>
+                                <button onclick="toggleDislike()" id="dislikeBtn" class="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+                                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M15 3H6c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l6.59-6.59c.36-.36.58-.86.58-1.41V5c0-1.1-.9-2-2-2zm4 0v12h4V3h-4z"/></svg>
+                                    <span id="dislikeCount">0</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="flex items-start gap-3 mt-4 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl">
+                            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 text-white font-bold flex items-center justify-center" id="channelAvatar">C</div>
+                            <div class="flex-1">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <h3 id="channelName" class="font-bold text-lg">Channel</h3>
+                                        <p class="text-sm text-gray-600 dark:text-gray-400" id="subscriberCount">0 subscribers</p>
+                                    </div>
+                                    <button onclick="toggleSubscribe()" id="subscribeBtn" class="px-6 py-2 bg-black dark:bg-white text-white dark:text-black rounded-full font-medium hover:opacity-90 transition-opacity">
+                                        Subscribe
+                                    </button>
+                                </div>
+                                <p id="videoDescription" class="mt-3 text-sm text-gray-700 dark:text-gray-300 line-clamp-3 cursor-pointer" onclick="this.classList.toggle('line-clamp-3')">
+                                    Loading description...
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="mt-6">
+                            <h3 class="font-bold text-lg mb-4">Comments <span id="commentCount" class="text-gray-500 font-normal">(0)</span></h3>
+                            <div class="flex gap-3 mb-6">
+                                <div class="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 text-white text-sm font-bold flex items-center justify-center flex-shrink-0" id="currentUserAvatar">U</div>
+                                <div class="flex-1">
+                                    <input type="text" id="commentInput" placeholder="Add a comment..." class="w-full bg-transparent border-b border-gray-300 dark:border-gray-700 focus:border-blue-500 focus:outline-none pb-2" onkeypress="handleCommentKeypress(event)">
+                                    <div class="flex justify-end gap-2 mt-2">
+                                        <button onclick="document.getElementById('commentInput').value=''" class="px-4 py-2 text-sm font-medium hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">Cancel</button>
+                                        <button onclick="postComment()" class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-full hover:bg-blue-700 transition-colors">Comment</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="commentsList" class="space-y-4"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-1">
+                    <h3 class="font-bold mb-4">Related Videos</h3>
+                    <div id="relatedVideos" class="space-y-3"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Upload Modal -->
+    <div id="uploadModal" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-900 rounded-2xl p-6 max-w-lg w-full shadow-2xl transform scale-95 opacity-0 transition-all duration-300" id="uploadModalContent">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold">Upload Video</h2>
+                <button onclick="toggleUploadModal()" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full">
+                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                </button>
+            </div>
+            
+            <div id="uploadForm">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium mb-2">Video Title</label>
+                    <input type="text" id="uploadTitle" class="w-full px-4 py-2 border dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Enter video title">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium mb-2">Description</label>
+                    <textarea id="uploadDescription" rows="3" class="w-full px-4 py-2 border dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Describe your video"></textarea>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium mb-2">Category</label>
+                    <select id="uploadCategory" class="w-full px-4 py-2 border dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        <option value="entertainment">Entertainment</option>
+                        <option value="gaming">Gaming</option>
+                        <option value="music">Music</option>
+                        <option value="tech">Technology</option>
+                    </select>
+                </div>
+                
+                <div class="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-8 text-center hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer relative" onclick="document.getElementById('videoFile').click()">
+                    <input type="file" id="videoFile" accept="video/*" class="hidden" onchange="handleFileSelect(this)">
+                    <div class="w-16 h-16 mx-auto mb-4 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center">
+                        <svg class="w-8 h-8 text-gray-500" fill="currentColor" viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11zM8 15.5l2.5-3.01L12.17 15l2.59-3.5L18 16H8v-.5z"/></svg>
+                    </div>
+                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-2" id="fileLabel">Click to select video file</p>
+                </div>
+
+                <div id="uploadProgress" class="hidden mt-4">
+                    <div class="flex justify-between text-sm mb-1">
+                        <span>Uploading to Cloudinary...</span>
+                        <span id="progressPercent">0%</span>
+                    </div>
+                    <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                        <div id="progressBar" class="bg-blue-600 h-2 rounded-full progress-bar" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <button onclick="uploadVideo()" id="uploadBtn" disabled class="mt-6 w-full py-3 bg-blue-600 text-white rounded-full font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                    Upload
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auth Modal -->
+    <div id="authModal" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-900 rounded-2xl p-8 max-w-md w-full shadow-2xl">
+            <div class="text-center mb-6">
+                <svg width="64" height="64" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" class="mx-auto mb-4 rounded-2xl shadow-lg">
+                    <rect width="100" height="100" rx="20" fill="#FF0000"/>
+                    <path d="M35 30 L35 70 L75 50 Z" fill="white"/>
+                </svg>
+                <h2 class="text-2xl font-bold">Sign in to SimpleTube</h2>
+            </div>
+            <div class="space-y-4">
+                <input type="email" id="authEmail" placeholder="Email" class="w-full px-4 py-3 border dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                <input type="password" id="authPassword" placeholder="Password" class="w-full px-4 py-3 border dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                <button onclick="signIn()" class="w-full py-3 bg-blue-600 text-white rounded-full font-medium hover:bg-blue-700 transition-colors">Sign In</button>
+                <button onclick="signUp()" class="w-full py-3 border border-gray-300 dark:border-gray-700 rounded-full font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">Create Account</button>
+                <button onclick="toggleAuthModal()" class="w-full py-3 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Profile Dropdown -->
+    <div id="profileDropdown" class="fixed right-4 top-14 w-64 bg-white dark:bg-gray-900 rounded-xl shadow-2xl z-50 hidden border dark:border-gray-800">
+        <div class="p-4 border-b dark:border-gray-800">
+            <div class="flex gap-3 items-center">
+                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 text-white font-bold flex items-center justify-center" id="dropdownAvatar">U</div>
+                <div>
+                    <p class="font-medium" id="dropdownName">User</p>
+                    <p class="text-sm text-gray-500" id="dropdownEmail">user@example.com</p>
+                </div>
+            </div>
+        </div>
+        <div class="py-2">
+            <button onclick="signOut()" class="w-full px-4 py-3 flex items-center gap-3 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-left">
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M10.09 15.59L11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5c-1.11 0-2 .9-2 2v4h2V5h14v14H5v-4H3v4c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg>
+                <span>Sign out</span>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // CLOUDINARY CONFIGURATION
+        // ==========================================
+        const CLOUDINARY_CLOUD_NAME = 'Dbiinkmjc'; // Your cloud name
+        const CLOUDINARY_UPLOAD_PRESET = 'simpletube_unsigned'; // Your preset name
+        
+        // ==========================================
+        // FIREBASE CONFIGURATION
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyAWD-PCMDFD-iCo61TjvcH8SU5A5HtovOo",
+            authDomain: "simpletube-d04dd.firebaseapp.com",
+            databaseURL: "https://simpletube-d04dd-default-rtdb.firebaseio.com",
+            projectId: "simpletube-d04dd",
+            storageBucket: "simpletube-d04dd.appspot.com",
+            messagingSenderId: "542864931589",
+            appId: "1:542864931589:web:613d596296c3a2bf03956c"
+        };
+
+        // Initialize Firebase
+        const app = firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        const auth = firebase.auth();
+
+        let currentUser = null;
+        let currentVideo = null;
+        let selectedFile = null;
+        let videosCache = [];
+
+        // ==========================================
+        // AUTH FUNCTIONS
+        // ==========================================
+        auth.onAuthStateChanged((user) => {
+            currentUser = user;
+            updateAuthUI();
+            loadVideos();
+        });
+
+        function updateAuthUI() {
+            const signInBtn = document.getElementById('signInBtn');
+            const userProfile = document.getElementById('userProfile');
+            
+            if (currentUser) {
+                signInBtn.classList.add('hidden');
+                userProfile.classList.remove('hidden');
+                const initial = currentUser.email ? currentUser.email[0].toUpperCase() : 'U';
+                document.getElementById('userAvatar').textContent = initial;
+                document.getElementById('currentUserAvatar').textContent = initial;
+                document.getElementById('dropdownAvatar').textContent = initial;
+                document.getElementById('dropdownName').textContent = currentUser.email.split('@')[0];
+                document.getElementById('dropdownEmail').textContent = currentUser.email;
+            } else {
+                signInBtn.classList.remove('hidden');
+                userProfile.classList.add('hidden');
+            }
+        }
+
+        function toggleAuthModal() {
+            const modal = document.getElementById('authModal');
+            modal.classList.toggle('hidden');
+            modal.classList.toggle('flex');
+        }
+
+        function signIn() {
+            const email = document.getElementById('authEmail').value;
+            const password = document.getElementById('authPassword').value;
+            auth.signInWithEmailAndPassword(email, password)
+                .then(() => toggleAuthModal())
+                .catch(err => alert(err.message));
+        }
+
+        function signUp() {
+            const email = document.getElementById('authEmail').value;
+            const password = document.getElementById('authPassword').value;
+            auth.createUserWithEmailAndPassword(email, password)
+                .then(() => toggleAuthModal())
+                .catch(err => alert(err.message));
+        }
+
+        function signOut() {
+            auth.signOut();
+            toggleProfile();
+        }
+
+        function toggleProfile() {
+            document.getElementById('profileDropdown').classList.toggle('hidden');
+        }
+
+        // ==========================================
+        // VIDEO FUNCTIONS
+        // ==========================================
+        function loadVideos() {
+            const videosRef = database.ref('videos');
+            videosRef.on('value', (snapshot) => {
+                const videos = [];
+                snapshot.forEach((child) => {
+                    videos.push({ id: child.key, ...child.val() });
+                });
+                videosCache = videos.reverse();
+                renderVideos(videosCache);
+            });
+        }
+
+        function renderVideos(videoList) {
+            const container = document.getElementById('videoGrid');
+            if (videoList.length === 0) {
+                container.innerHTML = '<div class="col-span-full text-center py-20 text-gray-500">No videos yet. Be the first to upload!</div>';
+                return;
+            }
+            
+            container.innerHTML = videoList.map(video => `
+                <div class="video-card group cursor-pointer flex flex-col gap-3" onclick="watchVideo('${video.id}')">
+                    <div class="relative aspect-video rounded-xl overflow-hidden bg-gray-200 dark:bg-gray-800">
+                        <img src="${video.thumbnailUrl || 'https://via.placeholder.com/640x360?text=Video'}" 
+                             alt="${video.title}" 
+                             class="thumbnail w-full h-full object-cover"
+                             onerror="this.src='https://via.placeholder.com/640x360?text=No+Thumbnail'">
+                        <div class="absolute bottom-2 right-2 bg-black/80 text-white text-xs px-1.5 py-0.5 rounded font-medium">
+                            ${formatDuration(video.duration || 0)}
+                        </div>
+                    </div>
+                    <div class="flex gap-3">
+                        <div class="flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 text-white text-xs font-bold flex items-center justify-center">
+                            ${video.channel ? video.channel[0].toUpperCase() : 'U'}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h3 class="font-semibold text-base leading-tight line-clamp-2 mb-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                                ${video.title}
+                            </h3>
+                            <div class="text-sm text-gray-600 dark:text-gray-400">
+                                <span class="font-medium block">${video.channel || 'Unknown'}</span>
+                                <span>${formatViews(video.views || 0)} views • ${timeAgo(video.timestamp)}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function watchVideo(videoId) {
+            currentVideo = videoId;
+            const videoRef = database.ref('videos/' + videoId);
+            
+            videoRef.once('value').then((snapshot) => {
+                const video = snapshot.val();
+                if (!video) return;
+
+                videoRef.child('views').transaction((views) => (views || 0) + 1);
+
+                document.getElementById('homeView').classList.add('hidden');
+                document.getElementById('watchView').classList.remove('hidden');
+                window.scrollTo(0, 0);
+
+                const mainVideo = document.getElementById('mainVideo');
+                mainVideo.src = video.videoUrl;
+                
+                document.getElementById('videoTitle').textContent = video.title;
+                document.getElementById('videoDescription').textContent = video.description || 'No description';
+                document.getElementById('channelName').textContent = video.channel || 'Unknown';
+                document.getElementById('channelAvatar').textContent = video.channel ? video.channel[0].toUpperCase() : 'U';
+                document.getElementById('videoViews').textContent = formatViews((video.views || 0) + 1) + ' views';
+                document.getElementById('videoDate').textContent = timeAgo(video.timestamp);
+                document.getElementById('likeCount').textContent = video.likes || 0;
+                document.getElementById('dislikeCount').textContent = video.dislikes || 0;
+
+                loadComments(videoId);
+                loadRelatedVideos(videoId, video.category);
+                mainVideo.play();
+            });
+        }
+
+        function showHome() {
+            document.getElementById('watchView').classList.add('hidden');
+            document.getElementById('homeView').classList.remove('hidden');
+            const mainVideo = document.getElementById('mainVideo');
+            mainVideo.pause();
+            mainVideo.src = '';
+        }
+
+        function loadRelatedVideos(currentId, category) {
+            const related = videosCache.filter(v => v.id !== currentId && v.category === category).slice(0, 5);
+            const container = document.getElementById('relatedVideos');
+            
+            container.innerHTML = (related.length > 0 ? related : videosCache.filter(v => v.id !== currentId).slice(0, 5)).map(video => `
+                <div class="flex gap-2 cursor-pointer group" onclick="watchVideo('${video.id}')">
+                    <div class="relative w-40 aspect-video rounded-lg overflow-hidden bg-gray-200 dark:bg-gray-800 flex-shrink-0">
+                        <img src="${video.thumbnailUrl || 'https://via.placeholder.com/640x360'}" class="w-full h-full object-cover">
+                        <div class="absolute bottom-1 right-1 bg-black/80 text-white text-xs px-1 rounded">${formatDuration(video.duration || 0)}</div>
+                    </div>
+                    <div class="flex-1">
+                        <h4 class="font-semibold text-sm line-clamp-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">${video.title}</h4>
+                        <p class="text-xs text-gray-600 dark:text-gray-400 mt-1">${video.channel || 'Unknown'}</p>
+                        <p class="text-xs text-gray-600 dark:text-gray-400">${formatViews(video.views || 0)} views</p>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function loadComments(videoId) {
+            const commentsRef = database.ref('comments/' + videoId);
+            commentsRef.on('value', (snapshot) => {
+                const comments = [];
+                snapshot.forEach((child) => {
+                    comments.push({ id: child.key, ...child.val() });
+                });
+                comments.reverse();
+                
+                document.getElementById('commentCount').textContent = `(${comments.length})`;
+                const container = document.getElementById('commentsList');
+                
+                if (comments.length === 0) {
+                    container.innerHTML = '<p class="text-gray-500 text-center py-4">No comments yet. Be the first!</p>';
+                    return;
+                }
+
+                container.innerHTML = comments.map(comment => `
+                    <div class="flex gap-3">
+                        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-green-400 to-blue-500 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
+                            ${comment.user ? comment.user[0].toUpperCase() : 'U'}
+                        </div>
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="font-semibold text-sm">${comment.user || 'Anonymous'}</span>
+                                <span class="text-xs text-gray-500">${timeAgo(comment.timestamp)}</span>
+                            </div>
+                            <p class="text-sm text-gray-700 dark:text-gray-300">${comment.text}</p>
+                        </div>
+                    </div>
+                `).join('');
+            });
+        }
+
+        function handleCommentKeypress(e) {
+            if (e.key === 'Enter') postComment();
+        }
+
+        function postComment() {
+            if (!currentUser) {
+                alert('Please sign in to comment');
+                toggleAuthModal();
+                return;
+            }
+            
+            const input = document.getElementById('commentInput');
+            const text = input.value.trim();
+            if (!text || !currentVideo) return;
+
+            database.ref('comments/' + currentVideo).push({
+                user: currentUser.email,
+                text: text,
+                timestamp: Date.now()
+            });
+            
+            input.value = '';
+        }
+
+        function toggleLike() {
+            if (!currentUser || !currentVideo) {
+                alert('Please sign in to like videos');
+                return;
+            }
+            const likeRef = database.ref(`videos/${currentVideo}/likes`);
+            likeRef.transaction((likes) => (likes || 0) + 1);
+            document.getElementById('likeBtn').classList.add('like-anim');
+            setTimeout(() => document.getElementById('likeBtn').classList.remove('like-anim'), 400);
+        }
+
+        function toggleDislike() {
+            if (!currentUser || !currentVideo) {
+                alert('Please sign in to dislike videos');
+                return;
+            }
+            database.ref(`videos/${currentVideo}/dislikes`).transaction((dislikes) => (dislikes || 0) + 1);
+        }
+
+        function toggleSubscribe() {
+            if (!currentUser) {
+                alert('Please sign in to subscribe');
+                return;
+            }
+            const btn = document.getElementById('subscribeBtn');
+            if (btn.textContent === 'Subscribe') {
+                btn.textContent = 'Subscribed';
+                btn.classList.remove('bg-black', 'dark:bg-white', 'text-white', 'dark:text-black');
+                btn.classList.add('bg-gray-200', 'dark:bg-gray-700');
+            } else {
+                btn.textContent = 'Subscribe';
+                btn.classList.add('bg-black', 'dark:bg-white', 'text-white', 'dark:text-black');
+                btn.classList.remove('bg-gray-200', 'dark:bg-gray-700');
+            }
+        }
+
+        // ==========================================
+        // UPLOAD FUNCTIONS
+        // ==========================================
+        function toggleUploadModal() {
+            if (!currentUser) {
+                alert('Please sign in to upload videos');
+                toggleAuthModal();
+                return;
+            }
+            
+            const modal = document.getElementById('uploadModal');
+            const content = document.getElementById('uploadModalContent');
+            
+            if (modal.classList.contains('hidden')) {
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+                setTimeout(() => {
+                    content.classList.remove('scale-95', 'opacity-0');
+                    content.classList.add('scale-100', 'opacity-100');
+                }, 10);
+            } else {
+                content.classList.add('scale-95', 'opacity-0');
+                content.classList.remove('scale-100', 'opacity-100');
+                setTimeout(() => {
+                    modal.classList.add('hidden');
+                    modal.classList.remove('flex');
+                }, 300);
+            }
+        }
+
+        function handleFileSelect(input) {
+            if (input.files && input.files[0]) {
+                selectedFile = input.files[0];
+                document.getElementById('fileLabel').textContent = selectedFile.name;
+                document.getElementById('uploadBtn').disabled = false;
+            }
+        }
+
+        async function uploadVideo() {
+            if (!selectedFile || !currentUser) return;
+
+            const title = document.getElementById('uploadTitle').value;
+            const description = document.getElementById('uploadDescription').value;
+            const category = document.getElementById('uploadCategory').value;
+            
+            if (!title) {
+                alert('Please enter a title');
+                return;
+            }
+
+            const uploadProgress = document.getElementById('uploadProgress');
+            const progressBar = document.getElementById('progressBar');
+            const progressPercent = document.getElementById('progressPercent');
+            const uploadBtn = document.getElementById('uploadBtn');
+            
+            uploadProgress.classList.remove('hidden');
+            uploadBtn.disabled = true;
+
+            try {
+                const formData = new FormData();
+                formData.append('file', selectedFile);
+                formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+                formData.append('resource_type', 'video');
+
+                // Simulate progress
+                let progress = 0;
+                const progressInterval = setInterval(() => {
+                    progress += Math.random() * 10;
+                    if (progress > 90) progress = 90;
+                    progressBar.style.width = progress + '%';
+                    progressPercent.textContent = Math.round(progress) + '%';
+                }, 800);
+
+                const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                clearInterval(progressInterval);
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error?.message || 'Upload failed');
+                }
+
+                const data = await response.json();
+                
+                progressBar.style.width = '100%';
+                progressPercent.textContent = '100%';
+
+                // Save to Firebase
+                const videoData = {
+                    title: title,
+                    description: description,
+                    category: category,
+                    videoUrl: data.secure_url,
+                    thumbnailUrl: data.thumbnail_url || `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/video/upload/${data.public_id}.jpg`,
+                    channel: currentUser.email.split('@')[0],
+                    timestamp: Date.now(),
+                    views: 0,
+                    likes: 0,
+                    dislikes: 0,
+                    duration: data.duration || 0
+                };
+
+                await database.ref('videos').push(videoData);
+                
+                setTimeout(() => {
+                    toggleUploadModal();
+                    document.getElementById('uploadTitle').value = '';
+                    document.getElementById('uploadDescription').value = '';
+                    document.getElementById('fileLabel').textContent = 'Click to select video file';
+                    uploadProgress.classList.add('hidden');
+                    progressBar.style.width = '0%';
+                    uploadBtn.disabled = true;
+                    selectedFile = null;
+                    alert('Video uploaded successfully!');
+                }, 500);
+
+            } catch (error) {
+                console.error('Upload error:', error);
+                alert('Upload failed: ' + error.message);
+                uploadBtn.disabled = false;
+            }
+        }
+
+        // ==========================================
+        // UTILITIES
+        // ==========================================
+        function formatViews(num) {
+            if (num >= 1000000) return (num/1000000).toFixed(1) + 'M';
+            if (num >= 1000) return (num/1000).toFixed(1) + 'K';
+            return num.toString();
+        }
+
+        function formatDuration(seconds) {
+            if (!seconds) return '0:00';
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function timeAgo(timestamp) {
+            if (!timestamp) return 'Recently';
+            const seconds = Math.floor((Date.now() - timestamp) / 1000);
+            if (seconds < 60) return 'Just now';
+            const minutes = Math.floor(seconds / 60);
+            if (minutes < 60) return minutes + ' min ago';
+            const hours = Math.floor(minutes / 60);
+            if (hours < 24) return hours + ' hours ago';
+            const days = Math.floor(hours / 24);
+            return days + ' days ago';
+        }
+
+        function filterCategory(category, btn) {
+            document.querySelectorAll('#categoryChips button').forEach(b => {
+                b.classList.remove('chip-active');
+                b.classList.add('bg-gray-100', 'dark:bg-gray-800');
+            });
+            btn.classList.remove('bg-gray-100', 'dark:bg-gray-800');
+            btn.classList.add('chip-active');
+
+            if (category === 'all') {
+                renderVideos(videosCache);
+            } else {
+                renderVideos(videosCache.filter(v => v.category === category));
+            }
+        }
+
+        function performSearch() {
+            const query = document.getElementById('searchInput').value.toLowerCase();
+            const filtered = videosCache.filter(v => 
+                v.title.toLowerCase().includes(query) || 
+                (v.channel && v.channel.toLowerCase().includes(query))
+            );
+            renderVideos(filtered);
+        }
+
+        // Event Listeners
+        document.getElementById('menuBtn').addEventListener('click', () => {
+            const sidebar = document.getElementById('sidebar');
+            const mainContent = document.getElementById('mainContent');
+            
+            if (window.innerWidth >= 768) {
+                if (sidebar.classList.contains('md:w-64')) {
+                    sidebar.classList.remove('md:w-64');
+                    sidebar.classList.add('md:w-0');
+                    mainContent.classList.remove('md:ml-64');
+                    mainContent.classList.add('md:ml-0');
+                } else {
+                    sidebar.classList.add('md:w-64');
+                    sidebar.classList.remove('md:w-0');
+                    mainContent.classList.add('md:ml-64');
+                    mainContent.classList.remove('md:ml-0');
+                }
+            } else {
+                sidebar.classList.toggle('-translate-x-full');
+            }
+        });
+
+        document.getElementById('searchInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') performSearch();
+        });
+
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.classList.add('dark');
+        }
+    </script>
+</body>
+</html>
